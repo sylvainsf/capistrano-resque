@@ -41,7 +41,7 @@ module CapistranoResque
                 puts "Starting #{number_of_workers} worker(s) with QUEUE: #{queue}"
                 number_of_workers.times do
                   pid = "./tmp/pids/resque_work_#{worker_id}.pid"
-                  run("cd #{current_path} && RAILS_ENV=#{rails_env} QUEUE=#{queue} PIDFILE=#{pid} BACKGROUND=yes VERBOSE=1 #{fetch(:bundle_cmd, "bundle")} exec rake environment resque:work >> #{shared_path}/log/resque.log 2>&1 &", :roles => role)
+                  run("cd #{current_path} && (RAILS_ENV=#{rails_env} QUEUE=#{queue} PIDFILE=#{pid} BACKGROUND=yes VERBOSE=1 #{fetch(:bundle_cmd, "bundle")} exec nohup rake environment resque:work >>      #{shared_path}/log/resque.log 2>&1 &); sleep 1", :roles => role)
                   worker_id += 1
                 end
               end
