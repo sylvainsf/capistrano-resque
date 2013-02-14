@@ -1,7 +1,3 @@
-# Changes
-
-Using SIGQUIT to kill processes as they aren't terminating properly.
-
 # Capistrano Resque
 
 Basic tasks for putting some Resque in your Cap.
@@ -40,13 +36,13 @@ Running cap -vT | grep resque should give you...
 
 ```
 ➔ cap -vT | grep resque
-cap resque:status    # Check worksers status
+cap resque:status    # Check workers status
 cap resque:start     # Start Resque workers
 cap resque:stop      # Quit running Resque workers
 cap resque:restart   # Restart running Resque workers
-cap resque:scheduler:restart # 
-cap resque:scheduler:start   # Starts resque scheduler with default configs
-cap resque:scheduler:stop    # Stops resque scheduler
+cap resque:scheduler:restart #
+cap resque:scheduler:start   # Starts Resque Scheduler with default configs
+cap resque:scheduler:stop    # Stops Resque Scheduler
 ```
 
 ### Restart on deployment
@@ -59,9 +55,40 @@ after "deploy:restart", "resque:restart"
 ```
 ### Logging
 
-I've decided to lose the logging ability altogether, in order to keep up with recent versions of Resque, following the chatter on: https://github.com/defunkt/resque/pull/450
+Backgrounding and logging are current sticking points. I'm using the HEAD of resque's 1-x-stable branch for the 0.0.8 release because it has some new logging functions not yet slated for a resque release.
 
-If logging is important to you, there's still the 0.0.4 release of this project.
+In your Gemfile, you will need to specify:
+
+```
+gem 'resque', :git => 'git://github.com/defunkt/resque.git', :branch => '1-x-stable'
+```
+
+Also, you will need to include:
+
+```
+Resque.logger = Logger.new("new_resque_log_file")
+```
+
+...somewhere sensible, such as in your resque.rake, to achieve logging.
+
+The chatter on: https://github.com/defunkt/resque/pull/450 gives more information. If using HEAD of this resque branch doesn't work for you, then pin to v0.0.7 of this project.
+
+### Limitations
+
+Starting workers is done concurently via capistrano and you are limited by ssh connections limit on your server (default limit is 10)
+
+in order to use more workers please change your sshd configurtion (/etc/ssh/sshd_config)
+
+    MaxStartups 100
+
+
+### Contributing
+
+1. Fork it
+2. Create your feature branch (`git checkout -b my-new-feature`)
+3. Commit your changes (`git commit -am 'Added some feature'`)
+4. Push to the branch (`git push origin my-new-feature`)
+5. Create new Pull Request
 
 ### License
 
