@@ -9,6 +9,17 @@ module CapistranoResque
         _cset(:workers, {"*" => 1})
         _cset(:resque_kill_signal, "QUIT")
         _cset(:interval, "5")
+        _cset(:resque_environment_task, false)
+        _cset(:resque_log_file, "/dev/null")
+        _cset(:resque_pid_path) { File.join(shared_path, 'tmp', 'pids') }
+
+        def rails_env
+          fetch(:resque_rails_env, fetch(:rails_env, "production"))
+        end
+
+        def output_redirection
+          ">> #{fetch(:resque_log_file)} 2>> #{fetch(:resque_log_file)}"
+        end
 
         def workers_roles
           return workers.keys if workers.first[1].is_a? Hash
@@ -26,8 +37,8 @@ module CapistranoResque
         end
 
         def status_command
-          "if [ -e #{current_path}/tmp/pids/resque_work_1.pid ]; then \
-            for f in $(ls #{current_path}/tmp/pids/resque_work*.pid); \
+          "if [ -e #{fetch(:resque_pid_path)}/resque_work_1.pid ]; then \
+            for f in $(ls #{fetch(:resque_pid_path)}/resque_work*.pid); \
               do ps -p $(cat $f) | sed -n 2p ; done \
            ;fi"
         end
@@ -39,23 +50,43 @@ module CapistranoResque
         end
 
         def stop_command
-          "if [ -e #{current_path}/tmp/pids/resque_work_1.pid ]; then \
-           for f in `ls #{current_path}/tmp/pids/resque_work*.pid`; \
-             do #{try_sudo} kill -s #{resque_kill_signal} `cat $f` \
-             && rm $f ;done \
+          "if [ -e #{fetch(:resque_pid_path)}/resque_work_1.pid ]; then \
+           for f in `ls #{fetch(:resque_pid_path)}/resque_work*.pid`; \
+             do \
+               if kill -0 `cat $f`> /dev/null 2>&1; then \
+                 kill -s #{resque_kill_signal} `cat $f` \
+                 && rm $f \
+               ;else \
+                 echo 'Resque was not running, cleaning up stale PID file' \
+                 && rm $f \
+               ;fi \
+             ;done \
+           ;fi"
+        end
+
+        def status_scheduler
+          "if [ -e #{fetch(:resque_pid_path)}/scheduler.pid ]; then \
+             ps -p $(cat #{fetch(:resque_pid_path)}/scheduler.pid) | sed -n 2p \
            ;fi"
         end
 
         def start_scheduler(pid)
           "cd #{current_path} && RAILS_ENV=#{rails_env} \
-           PIDFILE=#{pid} BACKGROUND=yes VERBOSE=1 \
-           #{fetch(:bundle_cmd, "bundle")} exec rake resque:scheduler"
+           PIDFILE=#{pid} BACKGROUND=yes VERBOSE=1 MUTE=1 \
+           #{fetch(:bundle_cmd, "bundle")} exec rake resque:scheduler #{output_redirection}"
         end
 
         def stop_scheduler(pid)
           "if [ -e #{pid} ]; then \
-            #{try_sudo} kill $(cat #{pid}) ; rm #{pid} \
+            kill -s #{resque_kill_signal} $(cat #{pid}) ; rm #{pid} \
            ;fi"
+        end
+
+        def create_pid_path
+          "if [ ! -d #{fetch(:resque_pid_path)} ]; then \
+            echo 'Creating #{fetch(:resque_pid_path)}' \
+            && mkdir -p #{fetch(:resque_pid_path)}\
+          ;fi"
         end
 
         namespace :resque do
@@ -66,13 +97,14 @@ module CapistranoResque
 
           desc "Start Resque workers"
           task :start, :roles => lambda { workers_roles() }, :on_no_matching_servers => :continue do
+            run(create_pid_path)
             for_each_workers do |role, workers|
               worker_id = 1
               workers.each_pair do |queue, number_of_workers|
                 logger.info "Starting #{number_of_workers} worker(s) with QUEUE: #{queue}"
                 threads = []
                 number_of_workers.times do
-                  pid = "./tmp/pids/resque_work_#{worker_id}.pid"
+                  pid = "#{fetch(:resque_pid_path)}/resque_work_#{worker_id}.pid"
                   threads << Thread.new(pid) { |pid| run(start_command(queue, pid), :roles => role) }
                   worker_id += 1
                 end
@@ -99,15 +131,21 @@ module CapistranoResque
           end
 
           namespace :scheduler do
+            desc "See current scheduler status"
+            task :status, :roles => :resque_scheduler do
+              run(status_scheduler)
+            end
+
             desc "Starts resque scheduler with default configs"
             task :start, :roles => :resque_scheduler do
-              pid = "#{current_path}/tmp/pids/scheduler.pid"
+              run(create_pid_path)
+              pid = "#{fetch(:resque_pid_path)}/scheduler.pid"
               run(start_scheduler(pid))
             end
 
             desc "Stops resque scheduler"
             task :stop, :roles => :resque_scheduler do
-              pid = "#{current_path}/tmp/pids/scheduler.pid"
+              pid = "#{fetch(:resque_pid_path)}/scheduler.pid"
               run(stop_scheduler(pid))
             end
 

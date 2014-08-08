@@ -1,12 +1,23 @@
 # Capistrano Resque
 
-Basic tasks for putting some Resque in your Cap.
+Basic tasks for putting some Resque in your Cap. This should be fully compatible with both Capistrano 2.x and 3.x,
+but if you run into any issues please report them.
+
+### In your Gemfile:
+
+```
+gem "capistrano-resque", "~> 0.2.0", require: false
+```
 
 ### In your Capfile:
 
 ```
 require "capistrano-resque"
 ```
+
+Note: You must tell Bundler not to automatically require the file (by using `require: false`),
+otherwise the gem will try to load the Capistrano tasks outside of the context of running
+the `cap` command (e.g. running `rails console`).
 
 ### In your deploy.rb:
 
@@ -15,6 +26,14 @@ role :resque_worker, "app_domain"
 role :resque_scheduler, "app_domain"
 
 set :workers, { "my_queue_name" => 2 }
+
+# We default to storing PID files in a tmp/pids folder in your shared path, but
+# you can customize it here (make sure to use a full path). The path will be
+# created before starting workers if it doesn't already exist.
+# set :resque_pid_path, -> { File.join(shared_path, 'tmp', 'pids') }
+
+# Uncomment this line if your workers need access to the Rails environment:
+# set :resque_environment_task, true
 ```
 
 You can also specify multiple queues and the number of workers
@@ -29,6 +48,48 @@ The above will start five workers in total:
  * one listening on the `archive` queue
  * one listening on the `search_index, cache_warming` queue
  * three listening on the `mailing` queue
+
+### Multiple Servers/Roles
+
+You can also start up workers on multiple servers/roles:
+
+```
+role :worker_server_A,  <server-ip-A>
+role :worker_servers_B_and_C,  [<server-ip-B>, <server-ip-C>]
+
+set :workers, {
+  worker_server_A: {
+    "archive" => 1,
+    "mailing" => 1
+  },
+  worker_servers_B_and_C: {
+    "search_index" => 1,
+  }
+}
+```
+
+The above will start four workers in total:
+
+ * one `archive` on Server A
+ * one `mailing` on Server A
+ * one `search_index` on Server B
+ * one `search_index` on Server C
+
+### Rails Environment
+
+With Rails, Resque requires loading the Rails environment task to have access to your models, etc. (e.g. `QUEUE=* rake environment resque:work`). However, Resque is often used without Rails (and even if you are using Rails, you may not need/want to load the Rails environment). As such, the `environment` task is not automatically included.
+
+If you would like to load the `environment` task automatically, add this to your `deploy.rb`:
+
+```
+set :resque_environment_task, true
+```
+
+If you would like your workers to use a different Rails environment than your actual Rails app:
+
+```
+set :resque_rails_env, "my_resque_env"
+```
 
 ### The tasks
 
@@ -53,6 +114,7 @@ add the following line to your `deploy.rb`:
 ```
 after "deploy:restart", "resque:restart"
 ```
+
 ### Logging
 
 Backgrounding and logging are current sticking points. I'm using the HEAD of resque's 1-x-stable branch for the 0.0.8 release because it has some new logging functions not yet slated for a resque release.
@@ -60,7 +122,7 @@ Backgrounding and logging are current sticking points. I'm using the HEAD of res
 In your Gemfile, you will need to specify:
 
 ```
-gem 'resque', :git => 'git://github.com/defunkt/resque.git', :branch => '1-x-stable'
+gem 'resque', :git => 'git://github.com/resque/resque.git', :branch => '1-x-stable'
 ```
 
 Also, you will need to include:
@@ -73,11 +135,21 @@ Resque.logger = Logger.new("new_resque_log_file")
 
 The chatter on: https://github.com/defunkt/resque/pull/450 gives more information. If using HEAD of this resque branch doesn't work for you, then pin to v0.0.7 of this project.
 
+### Redirecting output
+
+Due to issues in the way Resque 1.x handles background processes, we automatically redirect stderr and stdout to `/dev/null`.
+
+If you'd like to capture this output instead, just specify a log file:
+
+```ruby
+set :resque_log_file, "log/resque.log"
+```
+
 ### Limitations
 
-Starting workers is done concurently via capistrano and you are limited by ssh connections limit on your server (default limit is 10)
+Starting workers is done concurrently via Capistrano and you are limited by ssh connections limit on your server (default limit is 10)
 
-in order to use more workers please change your sshd configurtion (/etc/ssh/sshd_config)
+To to use more workers, please change your sshd configuration (/etc/ssh/sshd_config)
 
     MaxStartups 100
 
@@ -87,8 +159,9 @@ in order to use more workers please change your sshd configurtion (/etc/ssh/sshd
 1. Fork it
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Added some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create new Pull Request
+4. If possible, make sure your changes apply to both the Capistrano v2 and v3 code (`capistrano_integration.rb` is v2, `capistrano-resque.rake` is v3)
+5. Push to the branch (`git push origin my-new-feature`)
+6. Create new Pull Request
 
 ### License
 
