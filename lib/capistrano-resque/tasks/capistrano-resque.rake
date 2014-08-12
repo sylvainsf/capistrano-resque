@@ -68,7 +68,7 @@ namespace :resque do
           number_of_workers.times do
             pid = "#{fetch(:resque_pid_path)}/resque_work_#{worker_id}.pid"
             within current_path do
-              with rails_env: rails_env do
+              with rails_env: fetch(:rails_env) do
                 with queue: queue do
                   with pidfile: pidfile do
                     with background: "yes" do
