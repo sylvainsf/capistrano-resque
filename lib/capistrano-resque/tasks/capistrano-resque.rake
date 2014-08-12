@@ -68,16 +68,8 @@ namespace :resque do
           number_of_workers.times do
             pid = "#{fetch(:resque_pid_path)}/resque_work_#{worker_id}.pid"
             within current_path do
-              with rails_env: fetch(:rails_env) do
-                with queue: queue do
-                  with pidfile: pidfile do
-                    with background: "yes" do
-                      with interval: fetch(:interval) do
-                        execute "QUEUE=#{queue} PIDFILE=#{pid} BACKGROUND=yes VERBOSE=1 INTERVAL=#{fetch(:interval)}", :rvm, `cat .ruby-version`.strip, :do, :bundle, :exec, :rake, "resque:work >> /tmp/resque.log 2>> /tmp/resque.log"
-                      end
-                    end
-                  end
-                end
+              with rails_env: fetch(:rails_env), queue: queue, pidfile: pidfile, background: "yes", interval: fetch(:interval) do
+                execute "QUEUE=#{queue} PIDFILE=#{pid} BACKGROUND=yes VERBOSE=1 INTERVAL=#{fetch(:interval)}", :rvm, `cat .ruby-version`.strip, :do, :bundle, :exec, :rake, "resque:work >> /tmp/resque.log 2>> /tmp/resque.log"
               end
             end
             worker_id += 1
